@@ -1,3 +1,4 @@
+import json
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -8,9 +9,7 @@ from pytesseract import image_to_string
 from PIL import Image
 import io
 
-# ==============================
-# 💡 SYSTEM PROMPT (Unchanged)
-# ==============================
+
 SYSTEM_PROMPT = """
 You are transcations and bill record expert like an Accountant, You keep the track of payments and suggest better
 way to spend some amount of money. Also whenever asks any questions unrelated to finance just say I am sorry.
@@ -27,9 +26,7 @@ A. Buy a course or some books related to investments or you can reinvest.
 
 """
 
-# ==============================
-# OCR FILTER FUNCTION
-# ==============================
+
 def is_relevant_line(line):
     line = line.strip()
     if not line:
@@ -54,9 +51,9 @@ def is_relevant_line(line):
     return False
 
 
-# ==============================
-# OCR ENDPOINT (Optional)
-# ==============================
+
+
+
 @csrf_exempt
 def chatPrompt(request):
     if request.method == "POST":
@@ -90,43 +87,22 @@ def chatPrompt(request):
     return JsonResponse({"error": "Only POST method allowed"}, status=405)
 
 
-# ==============================
-# CHATBOT REPLY ENDPOINT
-# ==============================
+
 @csrf_exempt
 def chatReply(request):
-    if request.method == "POST":
-        body = json.loads(request.body.decode("utf-8"))
-        USER_PROMPT = body.get("prompt", "No question provided")
+    USER_PROMPT = "How to spend 500 rs?"
 
-        # Get OCR data if available
-        ocr_text = request.session.get("ocr_text", "No bill data provided.")
+    client = OpenAI(
+        api_key="AIzaSyAyIt0fQ1gZV-r_HTCPwt42pf7l2QyiSKI",
+        base_url="https://generativelanguage.googleapis.com/v1beta/"
+    )
 
-        # Combine OCR + User question
-        combined_prompt = f"""
-The following bill data was extracted from an uploaded receipt:
+    response = client.chat.completions.create(
+        model="gemini-2.5-flash",  # safer model for testing
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": USER_PROMPT}
+        ]
+    )
 
-{ocr_text}
-
-Now the user asks: {USER_PROMPT}
-"""
-
-        client = OpenAI(
-            api_key="YOUR_API_KEY",
-            base_url="https://generativelanguage.googleapis.com/v1beta/"
-        )
-
-        response = client.chat.completions.create(
-            model="gemini-2.5-flash",
-            n=1,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": combined_prompt}
-            ],
-        )
-
-        return JsonResponse({
-            "reply": str(response.choices[0].message.content)
-        })
-
-    return JsonResponse({"error": "Only POST method allowed"}, status=405)
+    return JsonResponse({"result": response.choices[0].message.content})
