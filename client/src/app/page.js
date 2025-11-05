@@ -3,8 +3,8 @@ import Chatbot from "@/Components/Chatbot";
 import Status from "@/Components/Status";
 export default function HomePage() {
   return (
-    <div class="flex-col">
-      <div class="flex justify-between">
+    <div className="flex-col">
+      <div className="flex justify-between">
         <Logo />
         <Status/>
       </div>
@@ -19,7 +19,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div class="flex mt-10 justify-center">
+      <div className="flex mt-10 justify-center">
         <Chatbot />
       </div>
     </div>

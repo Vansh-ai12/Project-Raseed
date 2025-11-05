@@ -11,19 +11,27 @@ import io
 
 
 SYSTEM_PROMPT = """
-You are transcations and bill record expert like an Accountant, You keep the track of payments and suggest better
-way to spend some amount of money. Also whenever asks any questions unrelated to finance just say I am sorry.
+You are a financial advisor and bill record expert.
+Your goal is to give **direct, specific, and helpful answers** related to money management,
+spending, savings, and investments.
 
-Example:1 
-Q: What is (a+b) whole sqaure?
+Rules:
+1. Always answer finance-related questions with clear reasoning and step-by-step advice.
+2. If the user asks about anything unrelated to finance, strictly reply with: "Sorry, I can't answer that."
+3. Never introduce yourself or say hello; respond directly with advice.
+4. Keep your tone expert, concise, and professional.
+
+Examples:
+
+Q: How to invest 5 lacs?
+A: You can invest ₹5,00,000 by diversifying:
+- 40% (₹2,00,000) into index mutual funds (like Nifty 50)
+- 30% (₹1,50,000) into fixed deposits or short-term debt funds
+- 20% (₹1,00,000) into gold ETFs
+- 10% (₹50,000) as emergency cash in savings.
+
+Q: What is (a+b)²?
 A: Sorry, I can't answer that.
-
-Q: What is Inertia?
-A:Sorry , I cant answer that.
-
-Q.As you saw my bill where should I spend my leftamount?
-A. Buy a course or some books related to investments or you can reinvest.
-
 """
 
 
@@ -51,34 +59,31 @@ def is_relevant_line(line):
     return False
 
 
-
-
-
 @csrf_exempt
 def chatPrompt(request):
     if request.method == "POST":
+        final_text = ""
+
         if "image" in request.FILES:
-            # Run OCR if image uploaded
             image_file = request.FILES["image"]
             img = Image.open(io.BytesIO(image_file.read()))
             raw_text = image_to_string(img)
 
-            # Clean text
-            filtered_lines = []
-            for line in raw_text.splitlines():
-                if is_relevant_line(line):
-                    line_clean = re.sub(r'[^\w\s\.]', '', line).strip()
-                    line_clean = re.sub(r'\s+', ' ', line_clean)
-                    filtered_lines.append(line_clean)
-
+            filtered_lines = [
+                re.sub(r'\s+', ' ', re.sub(r'[^\w\s\.]', '', line.strip()))
+                for line in raw_text.splitlines()
+                if is_relevant_line(line)
+            ]
             final_text = "\n".join(filtered_lines)
+            request.session["ocr_text"] = final_text
+            request.session.save()
+
         else:
-            # If no image, just save empty text
-            final_text = "No bill data provided."
-
-        # Save in session for chatReply
-        request.session["ocr_text"] = final_text
-
+            data = json.loads(request.body.decode('utf-8'))
+            message = data.get("message", "")
+            request.session["user_prompt"] = message  # <── Store safely
+            request.session.save()
+            print("SESSION KEY PROMPT:", request.session.session_key)
         return JsonResponse({
             "status": "success",
             "clean_bill_text": final_text
@@ -87,22 +92,27 @@ def chatPrompt(request):
     return JsonResponse({"error": "Only POST method allowed"}, status=405)
 
 
-
 @csrf_exempt
 def chatReply(request):
-    USER_PROMPT = "How to spend 500 rs?"
 
     client = OpenAI(
         api_key="AIzaSyAyIt0fQ1gZV-r_HTCPwt42pf7l2QyiSKI",
         base_url="https://generativelanguage.googleapis.com/v1beta/"
     )
+    print("SESSION KEY REPLY:", request.session.session_key)
+    user_prompt = request.session.get("user_prompt", "")
+    if not user_prompt:
+        return JsonResponse({"error": "No user message found"}, status=400)
 
     response = client.chat.completions.create(
         model="gemini-2.5-flash",  # safer model for testing
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": USER_PROMPT}
+            {"role": "user", "content": user_prompt}
         ]
     )
 
     return JsonResponse({"result": response.choices[0].message.content})
+
+
+
