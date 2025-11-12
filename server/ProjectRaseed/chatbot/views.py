@@ -34,87 +34,95 @@ itemsList = []
 def extract_text_from_image(image_file):
     global itemsList
     """
-    Advanced OCR pipeline for receipts
-    - EasyOCR + pytesseract hybrid
-    - Handles low-res and faded receipts
-    - Extracts clean item-price pairs
+    Enhanced OCR pipeline for receipts (e.g., MegaMart format).
+    Extracts item–price pairs and appends the final total as an item in the list.
+    Uses EasyOCR + bounding box alignment for high accuracy.
     """
     try:
-        # Step 1: Load and upscale image
+        # Step 1: Load image in grayscale
         image = Image.open(image_file).convert("L")
         img_np = np.array(image)
-
         h, w = img_np.shape[:2]
-        if w < 1200:  # Upscale small receipts
+
+        # Step 2: Resize for better OCR accuracy
+        if w < 1200:
             scale = 1200 / w
             img_np = cv2.resize(img_np, (0, 0), fx=scale, fy=scale)
 
-        # Step 2: Improve contrast using CLAHE
+        # Step 3: Enhance image for clarity
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        img_np = clahe.apply(img_np)
+        enhanced = clahe.apply(img_np)
+        enhanced = cv2.GaussianBlur(enhanced, (3, 3), 0)
 
-        # Step 3: Preserve edges but smooth background
-        img_np = cv2.bilateralFilter(img_np, 9, 75, 75)
-
-        # Step 4: Sharpen + threshold for crisp letters
-        img_np = cv2.adaptiveThreshold(
-            img_np, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY, 31, 2
-        )
-
-        # Step 5: OCR with EasyOCR
+        # Step 4: OCR using EasyOCR
         reader = easyocr.Reader(['en'], gpu=False)
-        easy_text = "\n".join(reader.readtext(img_np, detail=0)).strip()
+        results = reader.readtext(enhanced, detail=1)
 
-        # Step 6: OCR with pytesseract (fallback blend)
-        tess_text = pytesseract.image_to_string(img_np, config="--oem 3 --psm 6")
-        full_text = easy_text + "\n" + tess_text
-
-        print("\n===== 🧠 HYBRID OCR OUTPUT =====")
-        print(full_text)
-        print("===============================\n")
-
-        # Step 7: Clean text
-        text = re.sub(r"[^A-Za-z0-9₹$.\-:\n ]+", " ", full_text)
-        text = re.sub(r"[ ]{2,}", " ", text)
-
-        # Step 8: Regex for "item + price"
-        pattern = re.compile(
-            r"([A-Za-z][A-Za-z0-9()\- ]{1,40})[ .:₹$-]*\s*(\d+(?:\.\d{1,2})?)"
-        )
-
-        items = []
-        for line in text.splitlines():
-            line = line.strip()
-            if not line or len(line) < 3:
+        # Step 5: Group text by Y coordinate to align rows
+        lines = {}
+        for (bbox, text, conf) in results:
+            if conf < 0.5 or not text.strip():
                 continue
+            y_center = int((bbox[0][1] + bbox[2][1]) / 2)
+            matched_line = None
+            for key in lines.keys():
+                if abs(key - y_center) < 15:
+                    matched_line = key
+                    break
+            if matched_line is None:
+                lines[y_center] = [text]
+            else:
+                lines[matched_line].append(text)
 
-            # Skip headers and totals
-            if any(x in line.upper() for x in [
-                "RECEIPT", "TOTAL", "CASH", "CHANGE", "TAX",
-                "STORE", "DATE", "BILL", "AMOUNT", "THANK",
-                "APPROVAL", "CARD", "PAID", "AUTH", "SHOP"
+        # Step 6: Sort and clean lines
+        sorted_lines = [lines[k] for k in sorted(lines.keys())]
+        items = []
+        total_amount = None  # Track total amount
+
+        for group in sorted_lines:
+            line_text = " ".join(group)
+            line_text = re.sub(r"[^A-Za-z0-9₹$.,\-() ]+", " ", line_text).strip()
+
+            # Check for total amount
+            if any(x in line_text.upper() for x in ["TOTAL", "TOTAL AMOUNT", "GRAND TOTAL"]):
+                total_match = re.search(r"(\d{2,6}(?:\.\d{1,2})?)$", line_text)
+                if total_match:
+                    try:
+                        total_amount = float(total_match.group(1))
+                    except:
+                        pass
+                continue  # Skip processing this as a normal item
+
+            # Skip headers, metadata, taxes, discounts
+            if any(x in line_text.upper() for x in [
+                "CASH", "CHANGE", "TAX", "STORE", "DATE", "BILL", "AMOUNT",
+                "THANK", "RECEIPT", "CARD", "PAID", "AUTH", "SHOP", "GSTIN",
+                "TIME", "SECTOR", "NOIDA", "CALCULATION", "DISCOUNT", "GST"
             ]):
                 continue
 
-            match = pattern.search(line)
+            # Case: "Item .... 123.45"
+            match = re.search(r"([A-Za-z][A-Za-z0-9()\- ]{2,60})\s+(\d{1,5}(?:\.\d{1,2})?)$", line_text)
             if match:
                 name, price = match.groups()
-                name = name.strip().title()
                 try:
                     price_value = float(price)
-                    if 0.01 <= price_value <= 100000:
-                        items.append({"item": name, "price": price_value})
-                except ValueError:
+                    items.append({"item": name.strip().title(), "price": price_value})
+                except:
                     continue
+
+        # Step 7: Add total as a final "item"
+        if total_amount:
+            items.append({"item": "Total Amount", "price": total_amount})
+
         itemsList = items
 
-        # Step 9: Fallback — readable OCR text
+        # Step 8: Build final result
         if not items:
             return {
                 "status": "partial",
                 "message": "Structured data not found — returning readable OCR text",
-                "raw_text": full_text
+                "raw_text": "\n".join([" ".join(g) for g in sorted_lines])
             }
 
         print("✅ Extracted Items:", items)
@@ -122,6 +130,10 @@ def extract_text_from_image(image_file):
 
     except Exception as e:
         return {"status": "error", "message": f"OCR Pipeline Error: {str(e)}"}
+
+
+
+
 
 
 @csrf_exempt
@@ -189,4 +201,36 @@ def chatReply(request):
     )
 
     return JsonResponse({"result": response.choices[0].message.content})
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
