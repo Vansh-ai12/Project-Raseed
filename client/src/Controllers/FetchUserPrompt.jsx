@@ -2,7 +2,7 @@ export default async function FetchUserPrompt(prompt, selectedFile = null) {
   try {
     let response;
 
-    // Step 1️⃣ — Send image + message to Django
+   
     if (selectedFile) {
       const formData = new FormData();
       formData.append("image", selectedFile);
@@ -34,7 +34,7 @@ export default async function FetchUserPrompt(prompt, selectedFile = null) {
     const replyData = await replyResponse.json();
     console.log("💬 Gemini Reply:", replyData);
 
-    // Combine responses
+
     return {
       clean_bill_text: replyData.result || promptData.clean_bill_text,
     };

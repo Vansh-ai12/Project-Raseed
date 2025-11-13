@@ -31,7 +31,7 @@ export default function Chatbot({ onSend }) {
 
   return (
     <div className="flex flex-col items-center gap-3 w-full max-w-2xl mx-auto p-4 bg-white rounded-xl shadow border border-gray-200">
-      {/* 🖼️ Preview */}
+
       {previewUrl && (
         <div className="w-full flex justify-start mb-2">
           <div className="relative">
@@ -53,7 +53,7 @@ export default function Chatbot({ onSend }) {
         </div>
       )}
 
-      {/* Input + Send */}
+  
       <div className="flex items-center gap-3 w-full">
         <button
           onClick={handleClick}

@@ -9,11 +9,11 @@ export default function HomePage() {
   const [conversation, setConversation] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // 🧠 Handle send from Chatbot
+
   const handleUserSend = async (prompt, file) => {
     if (!prompt.trim() && !file) return;
 
-    // 1️⃣ Instantly show user's message
+  
     const newMsg = {
       sender: "user",
       text: prompt,
@@ -23,19 +23,19 @@ export default function HomePage() {
     setLoading(true);
 
     try {
-      // 2️⃣ Call backend (sending both text + image)
+     
       const res = await FetchUserPrompt(prompt, file);
 
-      // 3️⃣ Create bot message
+   
       let rawText =
         typeof res.clean_bill_text === "string"
           ? res.clean_bill_text
           : JSON.stringify(res.clean_bill_text, null, 2);
 
-      // Remove markdown formatting (*, _, #, `, >, etc.)
+  
       const cleanText = rawText
         .replace(/[*_`#>-]+/g, "")
-        .replace(/\n{2,}/g, "\n") // compress extra newlines
+        .replace(/\n{2,}/g, "\n") 
         .trim();
 
       const botMsg = { sender: "bot", text: cleanText };
@@ -52,16 +52,16 @@ export default function HomePage() {
 
   return (
     <div className="flex-col">
-      {/* Header */}
+  
       <div className="flex justify-between">
         <Logo />
         <Status />
       </div>
 
-      {/* 💬 Chat Window */}
+ 
       <div className="w-full max-w-5xl mx-auto h-[60vh] bg-white border border-gray-200 rounded-2xl shadow-inner overflow-y-auto p-6 scrollbar-hide mt-5">
         <div className="text-gray-700 leading-relaxed space-y-4">
-          {/* 🧠 Default Greeting */}
+     
           {conversation.length === 0 && (
             <p>
               Hello 👋, I’m{" "}
@@ -70,7 +70,7 @@ export default function HomePage() {
             </p>
           )}
 
-          {/* 💬 Messages */}
+        
           {conversation.map((msg, index) => (
             <div
               key={index}
@@ -97,7 +97,7 @@ export default function HomePage() {
             </div>
           ))}
 
-          {/* 🌀 ChatGPT-style Loading Bubble */}
+         
           {loading && (
             <div className="flex justify-start">
               <div className="bg-gray-100 text-gray-700 px-4 py-3 rounded-xl inline-flex items-center space-x-2 shadow-sm">
